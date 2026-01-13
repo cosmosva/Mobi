@@ -4,7 +4,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEditorStore } from '../../stores/editorStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { MermaidRenderer } from './MermaidRenderer';
-import { useImagePaste } from '../../hooks/useImagePaste';
+import { useFilePaste } from '../../hooks/useFilePaste';
 
 // 递归提取 React children 中的文本内容
 const getTextContent = (children: React.ReactNode): string => {
@@ -106,7 +106,7 @@ const CustomImage: React.FC<React.ImgHTMLAttributes<HTMLImageElement> & { baseDi
 export const Editor: React.FC = () => {
   const { content, setContent, editorMode, currentFilePath, workspaceDir, pendingImageMarkdown, setPendingImageMarkdown } = useEditorStore();
   const { fontSize } = useSettingsStore();
-  const { handlePaste } = useImagePaste();
+  const { handlePaste } = useFilePaste();
   const editorRef = useRef<HTMLDivElement>(null);
 
   // 计算基础目录用于解析相对路径图片

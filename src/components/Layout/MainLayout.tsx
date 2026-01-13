@@ -4,22 +4,33 @@ import { FileTree } from '../Sidebar';
 import { useFileSystem } from '../../hooks/useFileSystem';
 import { useSettingsStore, initTheme } from '../../stores/settingsStore';
 import { useEditorStore } from '../../stores/editorStore';
-import { useImagePaste } from '../../hooks/useImagePaste';
+import { useFilePaste } from '../../hooks/useFilePaste';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
-// 图片扩展名列表
+// 支持的文件扩展名列表
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
+const DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'];
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'];
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz'];
+const SUPPORTED_FILE_EXTENSIONS = [
+  ...IMAGE_EXTENSIONS,
+  ...DOCUMENT_EXTENSIONS,
+  ...AUDIO_EXTENSIONS,
+  ...VIDEO_EXTENSIONS,
+  ...ARCHIVE_EXTENSIONS,
+];
 
 export const MainLayout: React.FC = () => {
   const { sidebarWidth, setSidebarWidth } = useSettingsStore();
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [isResizing, setIsResizing] = useState(false);
-  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const { openFile, saveFile, newFile } = useFileSystem();
   const { currentFilePath, workspaceDir, setPendingImageMarkdown } = useEditorStore();
-  const { handleTauriDrop } = useImagePaste();
+  const { handleTauriDrop } = useFilePaste();
 
   // 使用 ref 保存最新的函数引用
   const openFileRef = useRef(openFile);
@@ -52,40 +63,40 @@ export const MainLayout: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // 监听从系统拖拽打开的文件（markdown 文件和图片文件）
+  // 监听从系统拖拽打开的文件（markdown 文件和附件文件）
   useEffect(() => {
     const setupFileOpenHandler = async () => {
       try {
         const appWindow = getCurrentWindow();
         const unlisten = await appWindow.onDragDropEvent(async (event) => {
           if (event.payload.type === 'enter') {
-            // 检查是否有图片文件
+            // 检查是否有支持的附件文件
             const paths = event.payload.paths || [];
-            const hasImage = paths.some((p: string) => {
+            const hasSupportedFile = paths.some((p: string) => {
               const ext = p.split('.').pop()?.toLowerCase() || '';
-              return IMAGE_EXTENSIONS.includes(ext);
+              return SUPPORTED_FILE_EXTENSIONS.includes(ext);
             });
-            if (hasImage) {
-              setIsDraggingImage(true);
+            if (hasSupportedFile) {
+              setIsDraggingFile(true);
             }
           } else if (event.payload.type === 'leave') {
-            setIsDraggingImage(false);
+            setIsDraggingFile(false);
           } else if (event.payload.type === 'drop' && event.payload.paths.length > 0) {
-            setIsDraggingImage(false);
+            setIsDraggingFile(false);
             const filePath = event.payload.paths[0];
             const ext = filePath.split('.').pop()?.toLowerCase() || '';
 
-            // 如果是图片文件，插入到编辑器
-            if (IMAGE_EXTENSIONS.includes(ext)) {
+            // 如果是支持的附件文件，插入到编辑器
+            if (SUPPORTED_FILE_EXTENSIONS.includes(ext)) {
               // 检查是否有打开的文件或工作目录
               if (!currentFilePath && !workspaceDir) {
-                alert('请先保存文件或打开一个目录后再拖拽图片');
+                alert('请先保存文件或打开一个目录后再拖拽文件');
                 return;
               }
-              const markdownImage = await handleTauriDrop(event.payload.paths);
-              if (markdownImage) {
-                // 通过 store 设置待插入的图片，让 Editor 组件插入到光标位置
-                setPendingImageMarkdown(markdownImage);
+              const markdownLink = await handleTauriDrop(event.payload.paths);
+              if (markdownLink) {
+                // 通过 store 设置待插入的内容，让 Editor 组件插入到光标位置
+                setPendingImageMarkdown(markdownLink);
               }
             } else if (filePath.match(/\.(md|markdown|txt)$/i)) {
               // 从外部拖拽打开，设置工作目录为文件所在目录
@@ -196,11 +207,11 @@ export const MainLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-gray-900 relative">
-      {/* 图片拖拽指示器 */}
-      {isDraggingImage && (
+      {/* 文件拖拽指示器 */}
+      {isDraggingFile && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none">
           <div className="text-lg font-medium text-blue-600 dark:text-blue-400">
-            释放以插入图片
+            释放以插入文件
           </div>
         </div>
       )}
