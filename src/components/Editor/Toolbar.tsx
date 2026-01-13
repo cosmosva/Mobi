@@ -174,7 +174,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleSidebar, sidebarVisibl
               />
               <div className="absolute top-full right-0 mt-1 py-2 px-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-20 min-w-[240px]">
                 <div className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  图片设置
+                  文件设置
                 </div>
                 <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
                   <input
