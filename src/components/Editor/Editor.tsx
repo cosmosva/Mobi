@@ -159,6 +159,13 @@ const CustomLink: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement> & { bas
         fullPath = `${baseDir}/${href}`;
       }
 
+      // 解码 URL 编码的路径（处理中文文件名等）
+      try {
+        fullPath = decodeURIComponent(fullPath);
+      } catch {
+        // 如果解码失败，使用原路径
+      }
+
       try {
         console.log('打开本地文件:', fullPath);
         await openPath(fullPath);
