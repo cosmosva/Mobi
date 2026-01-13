@@ -243,8 +243,9 @@ export const useFilePaste = () => {
     console.log('Tauri 拖拽文件路径:', paths);
 
     for (const filePath of paths) {
-      // 获取文件扩展名
+      // 获取文件扩展名和原始文件名
       const ext = filePath.split('.').pop()?.toLowerCase() || '';
+      const originalFileName = filePath.split('/').pop() || '';
 
       if (SUPPORTED_EXTENSIONS.includes(ext)) {
         try {
@@ -261,10 +262,17 @@ export const useFilePaste = () => {
             }
           }
 
-          // 生成新文件名
-          const prefix = isImageExtension(ext) ? 'image' : 'file';
-          const fileName = generateFileName(ext, prefix);
-          const targetPath = `${targetDir}/${fileName}`;
+          // 保留原始文件名，检查是否存在同名文件
+          let fileName = originalFileName;
+          let targetPath = `${targetDir}/${fileName}`;
+
+          // 如果文件已存在，添加时间戳后缀
+          if (await exists(targetPath)) {
+            const timestamp = Date.now();
+            const nameWithoutExt = originalFileName.replace(/\.[^.]+$/, '');
+            fileName = `${nameWithoutExt}_${timestamp}.${ext}`;
+            targetPath = `${targetDir}/${fileName}`;
+          }
 
           console.log('复制文件到:', targetPath);
 
@@ -278,7 +286,9 @@ export const useFilePaste = () => {
             ? `${imageSubfolderName}/${fileName}`
             : fileName;
 
-          return generateMarkdownLink(relativePath, fileName, ext);
+          // 对于链接显示，使用不带后缀的原始文件名作为显示名称
+          const displayName = originalFileName.replace(/\.[^.]+$/, '');
+          return generateMarkdownLink(relativePath, displayName, ext);
         } catch (error) {
           console.error('处理拖拽文件失败:', error);
           alert('处理拖拽文件失败: ' + (error instanceof Error ? error.message : String(error)));
@@ -286,7 +296,7 @@ export const useFilePaste = () => {
       }
     }
     return null;
-  }, [getBaseDir, saveImagesToSubfolder, imageSubfolderName, generateFileName, isImageExtension, generateMarkdownLink]);
+  }, [getBaseDir, saveImagesToSubfolder, imageSubfolderName, generateMarkdownLink]);
 
   return {
     handlePaste,
