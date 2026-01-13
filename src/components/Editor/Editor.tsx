@@ -1,10 +1,34 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { openPath } from '@tauri-apps/plugin-opener';
 import { useEditorStore } from '../../stores/editorStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { MermaidRenderer } from './MermaidRenderer';
 import { useFilePaste } from '../../hooks/useFilePaste';
+
+// 支持的文件扩展名
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
+const DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'];
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'];
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
+const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz'];
+
+// 获取文件图标
+const getFileIcon = (ext: string): string => {
+  if (IMAGE_EXTENSIONS.includes(ext)) return '🖼️';
+  if (DOCUMENT_EXTENSIONS.includes(ext)) {
+    if (ext === 'pdf') return '📕';
+    if (['doc', 'docx'].includes(ext)) return '📘';
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return '📗';
+    if (['ppt', 'pptx'].includes(ext)) return '📙';
+    return '📄';
+  }
+  if (AUDIO_EXTENSIONS.includes(ext)) return '🎵';
+  if (VIDEO_EXTENSIONS.includes(ext)) return '🎬';
+  if (ARCHIVE_EXTENSIONS.includes(ext)) return '📦';
+  return '📎';
+};
 
 // 递归提取 React children 中的文本内容
 const getTextContent = (children: React.ReactNode): string => {
@@ -103,6 +127,78 @@ const CustomImage: React.FC<React.ImgHTMLAttributes<HTMLImageElement> & { baseDi
   return <img src={imageSrc} alt={alt || ''} style={{ maxWidth: '100%' }} onError={handleError} {...rest} />;
 };
 
+// 自定义链接组件 - 支持本地文件打开
+const CustomLink: React.FC<React.AnchorHTMLAttributes<HTMLAnchorElement> & { baseDir?: string | null; children?: React.ReactNode }> = ({ href, children, baseDir, ...rest }) => {
+  const isLocalFile = href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && !href.startsWith('#');
+
+  // 获取文件扩展名
+  const ext = href?.split('.').pop()?.toLowerCase() || '';
+  const isKnownFileType = [...IMAGE_EXTENSIONS, ...DOCUMENT_EXTENSIONS, ...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS, ...ARCHIVE_EXTENSIONS].includes(ext);
+
+  const handleClick = async (e: React.MouseEvent) => {
+    if (!href) return;
+
+    // 网络链接用默认浏览器打开
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      e.preventDefault();
+      try {
+        await openPath(href);
+      } catch (error) {
+        console.error('打开链接失败:', error);
+      }
+      return;
+    }
+
+    // 本地文件
+    if (isLocalFile) {
+      e.preventDefault();
+
+      let fullPath = href;
+      // 如果是相对路径，拼接基础目录
+      if (!href.startsWith('/') && baseDir) {
+        fullPath = `${baseDir}/${href}`;
+      }
+
+      try {
+        console.log('打开本地文件:', fullPath);
+        await openPath(fullPath);
+      } catch (error) {
+        console.error('打开文件失败:', error);
+        alert('无法打开文件: ' + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+  };
+
+  // 本地文件显示图标
+  if (isLocalFile && isKnownFileType) {
+    const icon = getFileIcon(ext);
+    return (
+      <a
+        href={href}
+        onClick={handleClick}
+        className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+        title={`点击打开: ${href}`}
+        {...rest}
+      >
+        <span>{icon}</span>
+        <span>{children}</span>
+      </a>
+    );
+  }
+
+  // 普通链接
+  return (
+    <a
+      href={href}
+      onClick={handleClick}
+      className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+      {...rest}
+    >
+      {children}
+    </a>
+  );
+};
+
 export const Editor: React.FC = () => {
   const { content, setContent, editorMode, currentFilePath, workspaceDir, pendingImageMarkdown, setPendingImageMarkdown } = useEditorStore();
   const { fontSize } = useSettingsStore();
@@ -118,6 +214,13 @@ export const Editor: React.FC = () => {
   const ImageComponent = useMemo(() => {
     return (props: React.ImgHTMLAttributes<HTMLImageElement>) => (
       <CustomImage {...props} baseDir={baseDir} />
+    );
+  }, [baseDir]);
+
+  // 使用 useMemo 创建链接组件包装器，传递 baseDir
+  const LinkComponent = useMemo(() => {
+    return (props: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) => (
+      <CustomLink {...props} baseDir={baseDir} />
     );
   }, [baseDir]);
 
@@ -242,6 +345,7 @@ export const Editor: React.FC = () => {
           components: {
             code: CodeBlock,
             img: ImageComponent,
+            a: LinkComponent,
           },
         }}
       />
