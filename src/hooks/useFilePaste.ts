@@ -43,6 +43,53 @@ export const useFilePaste = () => {
     return workspaceDir;
   }, [currentFilePath, workspaceDir]);
 
+  // 获取当前 md 文件名（不含扩展名），用于创建专属子目录
+  const getCurrentFileName = useCallback((): string | null => {
+    if (currentFilePath) {
+      const fileName = currentFilePath.split('/').pop() || '';
+      // 移除扩展名
+      return fileName.replace(/\.(md|markdown|txt)$/i, '');
+    }
+    return null;
+  }, [currentFilePath]);
+
+  // 获取附件存储目录（基于当前文件名）
+  const getAttachmentDir = useCallback(async (): Promise<{ targetDir: string; relativePath: string } | null> => {
+    const baseDir = getBaseDir();
+    if (!baseDir) {
+      return null;
+    }
+
+    // 如果没有启用子目录功能，直接返回基础目录
+    if (!saveImagesToSubfolder || !imageSubfolderName) {
+      return { targetDir: baseDir, relativePath: '' };
+    }
+
+    // 获取当前文件名作为子目录
+    const currentFileName = getCurrentFileName();
+
+    let targetDir: string;
+    let relativePath: string;
+
+    if (currentFileName) {
+      // 有打开的文件：assets/文件名/
+      targetDir = `${baseDir}/${imageSubfolderName}/${currentFileName}`;
+      relativePath = `${imageSubfolderName}/${currentFileName}`;
+    } else {
+      // 没有打开文件（只有工作目录）：assets/
+      targetDir = `${baseDir}/${imageSubfolderName}`;
+      relativePath = imageSubfolderName;
+    }
+
+    // 确保目录存在
+    const dirExists = await exists(targetDir);
+    if (!dirExists) {
+      await mkdir(targetDir, { recursive: true });
+    }
+
+    return { targetDir, relativePath };
+  }, [getBaseDir, getCurrentFileName, saveImagesToSubfolder, imageSubfolderName]);
+
   // 从 MIME 类型获取文件扩展名
   const getExtensionFromMime = useCallback((mimeType: string): string | null => {
     const mimeToExt: Record<string, string> = {
@@ -105,27 +152,16 @@ export const useFilePaste = () => {
 
   // 保存文件到文件系统
   const saveFile = useCallback(async (fileData: ArrayBuffer, extension: string = 'png'): Promise<{ relativePath: string; fileName: string } | null> => {
-    const baseDir = getBaseDir();
+    const attachmentDir = await getAttachmentDir();
 
-    if (!baseDir) {
+    if (!attachmentDir) {
       console.warn('无法保存文件：没有打开的文件或工作目录');
       alert('请先保存文件或打开一个目录后再粘贴/拖拽文件');
       return null;
     }
 
     try {
-      let targetDir = baseDir;
-
-      // 如果设置了保存到子目录
-      if (saveImagesToSubfolder && imageSubfolderName) {
-        targetDir = `${baseDir}/${imageSubfolderName}`;
-
-        // 确保子目录存在
-        const dirExists = await exists(targetDir);
-        if (!dirExists) {
-          await mkdir(targetDir, { recursive: true });
-        }
-      }
+      const { targetDir, relativePath: basePath } = attachmentDir;
 
       // 根据文件类型选择前缀
       const prefix = isImageExtension(extension) ? 'image' : 'file';
@@ -140,16 +176,14 @@ export const useFilePaste = () => {
       console.log('文件保存成功');
 
       // 返回相对路径用于 Markdown
-      if (saveImagesToSubfolder && imageSubfolderName) {
-        return { relativePath: `${imageSubfolderName}/${fileName}`, fileName };
-      }
-      return { relativePath: fileName, fileName };
+      const relativePath = basePath ? `${basePath}/${fileName}` : fileName;
+      return { relativePath, fileName };
     } catch (error) {
       console.error('保存文件失败:', error);
       alert('保存文件失败: ' + (error instanceof Error ? error.message : String(error)));
       return null;
     }
-  }, [getBaseDir, saveImagesToSubfolder, imageSubfolderName, generateFileName, isImageExtension]);
+  }, [getAttachmentDir, generateFileName, isImageExtension]);
 
   // 处理粘贴事件
   const handlePaste = useCallback(async (event: ClipboardEvent): Promise<string | null> => {
@@ -233,8 +267,8 @@ export const useFilePaste = () => {
       return null;
     }
 
-    const baseDir = getBaseDir();
-    if (!baseDir) {
+    const attachmentDir = await getAttachmentDir();
+    if (!attachmentDir) {
       console.warn('无法保存文件：没有打开的文件或工作目录');
       alert('请先保存文件或打开一个目录后再拖拽文件');
       return null;
@@ -252,15 +286,7 @@ export const useFilePaste = () => {
           // 读取源文件
           const fileData = await readFile(filePath);
 
-          // 确定目标目录
-          let targetDir = baseDir;
-          if (saveImagesToSubfolder && imageSubfolderName) {
-            targetDir = `${baseDir}/${imageSubfolderName}`;
-            const dirExists = await exists(targetDir);
-            if (!dirExists) {
-              await mkdir(targetDir, { recursive: true });
-            }
-          }
+          const { targetDir, relativePath: basePath } = attachmentDir;
 
           // 保留原始文件名，检查是否存在同名文件
           let fileName = originalFileName;
@@ -282,9 +308,7 @@ export const useFilePaste = () => {
           console.log('文件复制成功');
 
           // 返回 Markdown 链接
-          const relativePath = saveImagesToSubfolder && imageSubfolderName
-            ? `${imageSubfolderName}/${fileName}`
-            : fileName;
+          const relativePath = basePath ? `${basePath}/${fileName}` : fileName;
 
           // 对于链接显示，使用不带后缀的原始文件名作为显示名称
           const displayName = originalFileName.replace(/\.[^.]+$/, '');
@@ -296,7 +320,7 @@ export const useFilePaste = () => {
       }
     }
     return null;
-  }, [getBaseDir, saveImagesToSubfolder, imageSubfolderName, generateMarkdownLink]);
+  }, [getAttachmentDir, generateMarkdownLink]);
 
   return {
     handlePaste,
